@@ -21,7 +21,8 @@ def get_mock_args():
         rules_path="dummy_local.rules",
         socket_path="dummy.socket",
         telegram_token="YOUR_BOT_TOKEN",
-        telegram_chat_id="YOUR_CHAT_ID"
+        telegram_chat_id="YOUR_CHAT_ID",
+        auto_block=None
     )
 
 @patch("tensorflow.keras.models.load_model")
@@ -102,3 +103,127 @@ def test_agent_sid_discovery(mock_exists, mock_json_load, mock_open, mock_load_m
     # Our code checks if "sid:" is in line, splits by "sid:", and extracts. So it parses both!
     # Expected starting SID = Max(1000005, 1000012, 1000050, 1000020) + 1 = 1000051.
     assert agent.current_sid == 1000051
+
+@patch("tensorflow.keras.models.load_model")
+@patch("agent.open")
+@patch("agent.json.load")
+def test_agent_whitelisting_and_extraction(mock_json_load, mock_open, mock_load_model):
+    """Verifies registered domain extraction and whitelist skipping behaviors."""
+    mock_json_load.return_value = {"a": 1}
+    agent = DGADetectorAgent(get_mock_args())
+    
+    # 1. Verify standard core registered domain extraction
+    assert agent.extract_registered_domain("a1051.dscg4.akamai.net") == "akamai.net"
+    assert agent.extract_registered_domain("repo42.cursor.sh") == "cursor.sh"
+    assert agent.extract_registered_domain("downloads77-windows.nordcdn.com") == "nordcdn.com"
+    assert agent.extract_registered_domain("google.com") == "google.com"
+    
+    # 2. Verify double TLD extraction
+    assert agent.extract_registered_domain("my-subdomain.co.uk") == "my-subdomain.co.uk"
+    assert agent.extract_registered_domain("test.api.com.cn") == "api.com.cn"
+    
+    # 3. Verify built-in whitelist matching
+    assert "akamai.net" in agent.builtin_whitelist
+    assert "cursor.sh" in agent.builtin_whitelist
+    assert "nordcdn.com" in agent.builtin_whitelist
+    assert "google.com" in agent.builtin_whitelist
+    assert "senecacollege.ca" in agent.builtin_whitelist
+
+
+@patch("tensorflow.keras.models.load_model")
+@patch("agent.open")
+@patch("agent.json.load")
+def test_agent_interactive_buttons_and_autoblock(mock_json_load, mock_open, mock_load_model):
+    """Verifies that the agent respects auto_block settings and processes all interactive button callback query actions."""
+    mock_json_load.return_value = {"a": 1}
+    
+    # 1. Verify auto-block options in constructor
+    args_default = get_mock_args()
+    args_default.auto_block = None
+    with patch.dict(os.environ, {"AUTO_BLOCK": "false"}):
+        agent_env_false = DGADetectorAgent(args_default)
+        assert agent_env_false.auto_block is False
+
+    with patch.dict(os.environ, {"AUTO_BLOCK": "true"}):
+        agent_env_true = DGADetectorAgent(args_default)
+        assert agent_env_true.auto_block is True
+
+    # CLI override --no-auto-block (sets auto_block=False)
+    args_no_auto = get_mock_args()
+    args_no_auto.auto_block = False
+    agent_cli_false = DGADetectorAgent(args_no_auto)
+    assert agent_cli_false.auto_block is False
+
+    # 2. Verify conditional blocking in trigger_defenses
+    agent_cli_false._block_on_pihole = MagicMock()
+    agent_cli_false._block_on_suricata = MagicMock()
+    agent_cli_false._dispatch_alerts = MagicMock()
+
+    # With auto_block = False
+    agent_cli_false.trigger_defenses("malicious.biz", 0.95)
+    agent_cli_false._block_on_pihole.assert_not_called()
+    agent_cli_false._block_on_suricata.assert_not_called()
+    agent_cli_false._dispatch_alerts.assert_called_once_with("malicious.biz", 0.95)
+
+    # With auto_block = True
+    agent_cli_false.auto_block = True
+    agent_cli_false.trigger_defenses("malicious.biz", 0.95)
+    agent_cli_false._block_on_pihole.assert_called_once_with("malicious.biz")
+    agent_cli_false._block_on_suricata.assert_called_once_with("malicious.biz")
+
+    # 3. Verify callback queries (_handle_callback_query)
+    agent = DGADetectorAgent(get_mock_args())
+    agent._block_on_pihole = MagicMock()
+    agent._block_on_suricata = MagicMock()
+    agent._unblock_domain = MagicMock()
+    agent._whitelist_domain = MagicMock()
+    agent._answer_callback = MagicMock()
+    agent._edit_message = MagicMock()
+
+    # A. Test action: "block"
+    callback_block = {
+        "id": "123",
+        "message": {"chat": {"id": 999}, "message_id": 456, "text": "alert text"},
+        "data": "block:badsite.info"
+    }
+    agent._handle_callback_query(callback_block)
+    agent._block_on_pihole.assert_called_once_with("badsite.info")
+    agent._block_on_suricata.assert_called_once_with("badsite.info")
+    agent._answer_callback.assert_called_once_with("123", "✅ Domain badsite.info blocked successfully!")
+    agent._edit_message.assert_called_once()
+
+    # Reset mocks
+    agent._block_on_pihole.reset_mock()
+    agent._block_on_suricata.reset_mock()
+    agent._answer_callback.reset_mock()
+    agent._edit_message.reset_mock()
+
+    # B. Test action: "whitelist"
+    callback_whitelist = {
+        "id": "124",
+        "message": {"chat": {"id": 999}, "message_id": 456, "text": "alert text"},
+        "data": "whitelist:badsite.info"
+    }
+    agent._handle_callback_query(callback_whitelist)
+    agent._unblock_domain.assert_called_once_with("badsite.info")
+    agent._whitelist_domain.assert_called_once_with("badsite.info")
+    agent._answer_callback.assert_called_once_with("124", "✅ Domain badsite.info unblocked and whitelisted!")
+    agent._edit_message.assert_called_once()
+
+    # Reset mocks
+    agent._unblock_domain.reset_mock()
+    agent._whitelist_domain.reset_mock()
+    agent._answer_callback.reset_mock()
+    agent._edit_message.reset_mock()
+
+    # C. Test action: "ignore"
+    callback_ignore = {
+        "id": "125",
+        "message": {"chat": {"id": 999}, "message_id": 456, "text": "alert text"},
+        "data": "ignore:badsite.info"
+    }
+    agent._handle_callback_query(callback_ignore)
+    agent._unblock_domain.assert_called_once_with("badsite.info")
+    agent._answer_callback.assert_called_once_with("125", "Alert ignored.")
+    agent._edit_message.assert_called_once()
+
