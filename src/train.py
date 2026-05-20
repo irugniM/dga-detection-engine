@@ -41,18 +41,34 @@ def generate_synthetic_data(num_samples=5000):
 
     # 1. Generate Benign Domains
     for _ in range(num_samples // 2):
+        rand_val = random.random()
         # Format A: Random combination of realistic syllables (e.g., "copaland.com")
-        if random.random() < 0.6:
+        if rand_val < 0.40:
             parts = [random.choice(syllables) for _ in range(random.randint(2, 4))]
             domain = "".join(parts) + random.choice(tlds)
         # Format B: Brand prefix + suffix or hyphenated words (e.g., "google-support.net")
-        else:
+        elif rand_val < 0.75:
             base = random.choice(benign_prefixes)
             suffix = random.choice(syllables)
             domain = f"{base}-{suffix}{random.choice(tlds)}"
+        # Format C: High-entropy looking CDN/cloud infrastructure subdomains (e.g., "a1024-xyz.akamai.net")
+        else:
+            infra_domains = [
+                "akamai.net", "amazonaws.com", "cloudfront.net", "nordcdn.com", 
+                "cursor.sh", "githubusercontent.com", "senecacollege.ca", "office365.com"
+            ]
+            selected_infra = random.choice(infra_domains)
+            # Generate alphanumeric high-entropy looking subdomain
+            length = random.randint(6, 15)
+            sub = "".join(random.choice("abcdefghijklmnopqrstuvwxyz0123456789-") for _ in range(length))
+            # Make sure it doesn't start or end with a hyphen
+            sub = sub.strip("-")
+            if not sub:
+                sub = "cdn"
+            domain = f"{sub}.{selected_infra}"
         
-        # Add random subdomains occasionally
-        if random.random() < 0.15:
+        # Add random subdomains occasionally to formats A & B
+        if rand_val < 0.75 and random.random() < 0.15:
             domain = random.choice(["www", "api", "mail", "blog"]) + "." + domain
             
         domains.append(domain)
@@ -110,7 +126,7 @@ def tokenize_and_pad(domains, char_index):
 
 # --- MODEL ARCHITECTURE ---
 def build_lstm_model(vocab_size):
-    """Builds a Bidirectional LSTM network using Keras Sequential API."""
+    """Builds a high-accuracy CNN-LSTM hybrid network using Keras Sequential API."""
     model = tf.keras.Sequential([
         # Input Layer: sequence length = MAX_LEN
         tf.keras.layers.Input(shape=(MAX_LEN,)),
@@ -118,7 +134,11 @@ def build_lstm_model(vocab_size):
         # Embedding Layer: Maps tokens to a 32-dimensional dense space
         tf.keras.layers.Embedding(input_dim=vocab_size + 1, output_dim=32, input_length=MAX_LEN),
         
-        # Bidirectional LSTM Layer: Learns temporal character features forwards and backwards
+        # 1D Convolutional Layer: Extracts local character clusters and n-gram structures
+        tf.keras.layers.Conv1D(filters=64, kernel_size=3, padding='same', activation='relu'),
+        tf.keras.layers.MaxPooling1D(pool_size=2),
+        
+        # Bidirectional LSTM Layer: Models sequential character ordering forwards and backwards
         tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(64, return_sequences=False)),
         
         # Dropout: Regularization to prevent overfitting
