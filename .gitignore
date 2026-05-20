@@ -1,0 +1,21 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Credentials
+.env
+
+# Mock Environment
+mock_env/
+
+# OS specific
+.DS_Store
+Thumbs.db

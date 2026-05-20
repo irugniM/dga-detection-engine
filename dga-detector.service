@@ -1,0 +1,26 @@
+[Unit]
+Description=LSTM DGA & Malicious Domain Detection Agent
+After=network.target network-online.target suricata.service pihole-FTL.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Ensure the agent runs as root to access raw Pi-hole logs, custom blocklists, and write Suricata rules/sockets
+User=root
+WorkingDirectory=/opt/dga-detection-engine
+ExecStart=/opt/dga-detection-engine/.venv/bin/python src/agent.py --threshold 0.85
+
+# Automatic restarts on failure
+Restart=always
+RestartSec=5
+
+# Logging configuration
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=dga-detector
+
+# Environment variables (optionally loaded from file)
+# EnvironmentFile=/opt/dga-detection-engine/.env
+
+[Install]
+WantedBy=multi-user.target
