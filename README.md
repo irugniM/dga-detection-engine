@@ -48,7 +48,7 @@ dga-detection-engine/
 
 ---
 
-## 🛠️ Installation & Setup
+## Installation & Setup
 
 ### 1. Prerequisites
 - **Python 3.9 - 3.11**
@@ -78,7 +78,7 @@ pip install -r requirements.txt
 
 ---
 
-## 🧠 Training the LSTM Model
+## Training the LSTM Model
 
 The training script synthetically generates a balanced dataset of $8,000$ domain queries (half benign and half DGA across multiple generation families like high-entropy strings, vowel/consonant collisions, and dictionary permutations) to construct and compile a Bidirectional LSTM classifier.
 
@@ -94,7 +94,7 @@ This will:
 
 ---
 
-## 🧪 Running the Test Suite
+## Running the Test Suite
 
 A comprehensive test suite is provided to validate preprocessing shapes, log tailing, regex-based log parsing patterns, and SID sequence discovery calculations.
 
@@ -105,7 +105,7 @@ pytest tests/
 
 ---
 
-## 🚀 Running the Real-Time Agent
+## Running the Real-Time Agent
 
 The agent is designed to run in two distinct modes:
 
@@ -132,7 +132,7 @@ sudo .venv/bin/python src/agent.py \
 
 ---
 
-## ⚙️ Enterprise Integration Specifications
+## Enterprise Integration Specifications
 
 ### 1. Direct Suricata Ruleset Socket Reload
 Spawning a shell command such as `subprocess.run(["suricatasc", ...])` on every threat detection adds latency and CPU context-switching overhead. To achieve sub-millisecond defensive updates, the agent uses a custom `SuricataSocketConnector` (`src/suricata_socket.py`) which:
@@ -148,7 +148,7 @@ When an indicator is identified, it is safely appended as `0.0.0.0 <domain>` to 
 
 ---
 
-## 🛡️ Daemon Deployment (systemd)
+## Daemon Deployment (systemd)
 
 To make the agent a permanent, self-healing background system service on your Linux gateway:
 
