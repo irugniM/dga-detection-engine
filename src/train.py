@@ -264,6 +264,23 @@ def main():
         "epochs": 5,
         "batch_size": 64,
     }
+    # The live agent blocks at 0.85, which trades recall for precision.
+    agent_pred = (y_pred_prob >= 0.85).astype(int)
+    metrics["agent_threshold"] = {
+        "threshold": 0.85,
+        "accuracy": round(float(accuracy_score(y_test, agent_pred)), 6),
+        "precision_malicious": round(float(precision_score(y_test, agent_pred, pos_label=1, zero_division=0)), 6),
+        "recall_malicious": round(float(recall_score(y_test, agent_pred, pos_label=1, zero_division=0)), 6),
+        "f1_malicious": round(float(f1_score(y_test, agent_pred, pos_label=1, zero_division=0)), 6),
+    }
+    agent = metrics["agent_threshold"]
+    print(
+        f"[+] Agent threshold {agent['threshold']:.2f}: "
+        f"accuracy {agent['accuracy']:.4f}, "
+        f"precision {agent['precision_malicious']:.4f}, "
+        f"recall {agent['recall_malicious']:.4f}, "
+        f"F1 {agent['f1_malicious']:.4f}"
+    )
     with open(METRICS_PATH, "w", encoding="utf-8") as handle:
         json.dump(metrics, handle, indent=2)
         handle.write("\n")

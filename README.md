@@ -143,6 +143,18 @@ The training files are balanced at **997,679 benign** and **997,679 malicious**:
 - 2,321 Majestic names that also appear on a hagezi list were removed from the benign class, which leaves 997,679 benign names. The malicious sample is cut to that same count so the classes stay equal.
 - 2,145 selected names are longer than 45 characters and are truncated by the tokenizer.
 
+Held-out evaluation uses a stratified 20% split (199,536 benign and 199,536 malicious). The positive class is malicious.
+
+| Metric | Threshold 0.50 | Threshold 0.85 |
+| --- | --- | --- |
+| Accuracy | 0.9030 | 0.7699 |
+| Precision (malicious) | 0.8582 | 0.9559 |
+| Recall (malicious) | 0.9654 | 0.5660 |
+| F1 (malicious) | 0.9087 | 0.7110 |
+| ROC-AUC | 0.9608 | 0.9608 |
+
+`python src/train.py` reports the 0.50 column. The agent blocks at 0.85 by default, which keeps malicious precision at 0.9559 and lowers recall. Full figures are in `models/training_metrics.json`.
+
 The [1275.ru DGA feed](https://1275.ru/DGA/dga.txt) was not merged. It does not state a license, and this model is binary, so family labels are unused.
 
 ### Refresh the feed
