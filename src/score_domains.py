@@ -39,9 +39,10 @@ def tokenize_domain(domain, char_index):
     truncates to ``MAX_LEN``.
     """
     domain = domain.lower().strip()
+    # Same cleaning as agent.preprocess_domain: drop a scheme and any path.
     if "://" in domain:
-        domain = domain.split("://", 1)[-1]
-    domain = domain.split("/", 1)[0]
+        domain = domain.split("://")[-1]
+    domain = domain.split("/")[0]
 
     tokens = [int(char_index.get(char, 0)) for char in domain]
     if len(tokens) < MAX_LEN:
@@ -172,7 +173,7 @@ def load_scorer(model_path, vocab_path, allow_keras_fallback):
         raise FileNotFoundError(f"Vocabulary file not found: {vocab_path}")
     char_index = load_char_index(vocab_path)
     backend, loaded_path = load_backend(model_path, allow_keras_fallback)
-    return DomainScorer(backend, char_index, loaded_path)
+    return DomainScorer(backend, char_index, os.path.normpath(loaded_path))
 
 
 def build_parser():

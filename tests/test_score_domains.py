@@ -85,6 +85,49 @@ def test_default_model_prefers_tflite_then_keras(monkeypatch, tmp_path):
     assert default_model_path() == str(keras)
 
 
+def test_missing_tflite_runtime_falls_back_to_keras(monkeypatch, tmp_path, capsys):
+    tflite = tmp_path / "dga_lstm_model.tflite"
+    keras = tmp_path / "dga_lstm_model.keras"
+    tflite.write_bytes(b"tflite")
+    keras.write_bytes(b"keras")
+
+    def missing_runtime():
+        raise ImportError("no runtime")
+
+    monkeypatch.setattr(score_domains, "import_tflite_module", missing_runtime)
+
+    created = {}
+
+    class FakeKeras:
+        def __init__(self, path):
+            created["path"] = path
+
+    monkeypatch.setattr(score_domains, "KerasBackend", FakeKeras)
+
+    backend, loaded = score_domains.load_backend(str(tflite), allow_keras_fallback=True)
+    captured = capsys.readouterr()
+
+    assert isinstance(backend, FakeKeras)
+    assert created["path"] == str(keras)
+    assert loaded == str(keras)
+    assert "falling back" in captured.err
+
+
+def test_explicit_tflite_path_does_not_fall_back(monkeypatch, tmp_path):
+    tflite = tmp_path / "dga_lstm_model.tflite"
+    keras = tmp_path / "dga_lstm_model.keras"
+    tflite.write_bytes(b"tflite")
+    keras.write_bytes(b"keras")
+
+    def missing_runtime():
+        raise ImportError("no runtime")
+
+    monkeypatch.setattr(score_domains, "import_tflite_module", missing_runtime)
+
+    with pytest.raises(ImportError, match="no runtime"):
+        score_domains.load_backend(str(tflite), allow_keras_fallback=False)
+
+
 def test_tflite_import_does_not_load_tensorflow(monkeypatch):
     imported = []
 
