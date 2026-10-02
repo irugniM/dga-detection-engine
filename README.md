@@ -44,13 +44,15 @@ dga-detection-engine/
 │   ├── download_datasets.py      # Fetches and balances the training lists
 │   ├── domains.py                # Normalization and dataset assembly
 │   ├── train.py                  # LSTM training and evaluation pipeline
+│   ├── score_domains.py          # Offline confidence scores for domain names
 │   ├── agent.py                  # Core real-time log-monitoring and inference daemon
 │   └── suricata_socket.py        # High-speed Unix domain socket rule-reloader (JSON-RPC)
 ├── tests/                        # Python test suite
 │   ├── __init__.py
 │   ├── test_domains.py           # Normalizer and balancing tests
 │   ├── test_train.py             # Tokenizer, vocabulary, and generator tests
-│   └── test_agent.py             # Log parser, preprocessor, and SID discovery tests
+│   ├── test_agent.py             # Log parser, preprocessor, and SID discovery tests
+│   └── test_score_domains.py     # Offline scorer tokenization and CLI output
 ├── requirements.txt              # Package dependencies
 ├── dga-detector.service          # Systemd system service unit template
 └── README.md                     # System documentation
@@ -182,6 +184,14 @@ To run the automated tests:
 ```bash
 pytest tests/
 ```
+
+Score names without starting the live agent. The script loads `models/dga_lstm_model.tflite` with `ai-edge-litert` or `tflite-runtime` when it can, and otherwise falls back to `models/dga_lstm_model.keras` (TensorFlow is imported only for that file). Each line is the domain, the confidence as a fraction and a percent, and `ALERT` or `ok` at threshold `0.85`:
+
+```bash
+python src/score_domains.py google.com qwertyuiopasdfghjkl.cc
+```
+
+Change the cutoff with `--threshold`. Names can also be piped on stdin, one per line.
 
 ---
 
