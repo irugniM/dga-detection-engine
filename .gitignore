@@ -16,6 +16,10 @@ htmlcov/
 # Mock Environment
 mock_env/
 
+# Raw feed downloads (regenerate with src/download_datasets.py)
+data/raw/
+*.part
+
 # OS specific
 .DS_Store
 Thumbs.db

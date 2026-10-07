@@ -1,0 +1,32 @@
+Training domain lists in this directory were prepared by src/download_datasets.py.
+The domain lists are separate works from the detection-engine code.
+
+Malicious domains
+  Source: hagezi/nrd entropy DGA / newly registered entropy domain lists
+  Homepage: https://github.com/hagezi/nrd
+  Feeds: domains/dga7.txt, domains/dga14.txt, domains/dga30.txt
+  Retrieved via jsDelivr:
+    https://cdn.jsdelivr.net/gh/hagezi/nrd@latest/domains/dga7.txt
+    https://cdn.jsdelivr.net/gh/hagezi/nrd@latest/domains/dga14.txt
+    https://cdn.jsdelivr.net/gh/hagezi/nrd@latest/domains/dga30.txt
+  License: GNU General Public License v3.0
+  License text: https://github.com/hagezi/nrd/blob/main/LICENSE
+  benign_domains.txt / malicious_domains.txt are normalized, de-duplicated
+  subsets (comments removed, names lowercased, scheme and path stripped).
+  Copyright in the hagezi lists remains with their authors. Those subsets
+  stay under GPL-3.0.
+
+Benign domains
+  Source: Majestic Million
+  Download: https://downloads.majestic.com/majestic_million.csv
+  Description: https://majestic.com/reports/majestic-million
+  License: Creative Commons Attribution 3.0 Unported (CC BY 3.0)
+  License text: https://creativecommons.org/licenses/by/3.0/
+  Credit: Majestic (https://majestic.com).
+  Changes: the CSV was reduced to normalized hostnames, names that also
+  appear on a hagezi entropy list were removed, and a deterministic sample
+  was taken so the benign count matches the malicious count.
+
+Not included
+  https://1275.ru/DGA/dga.txt was not merged. The feed does not state a
+  license, and family labels are unused by this binary classifier.

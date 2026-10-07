@@ -4,19 +4,32 @@ import random
 import numpy as np
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report, roc_auc_score
+from sklearn.metrics import (
+    accuracy_score,
+    classification_report,
+    f1_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
+
+from domains import load_labeled_domains
 
 # --- CONFIGURATION ---
 MAX_LEN = 45
-MODEL_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models"))
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+DATA_DIR = os.path.join(ROOT_DIR, "data")
+MODEL_DIR = os.path.join(ROOT_DIR, "models")
 MODEL_PATH = os.path.join(MODEL_DIR, "dga_lstm_model.keras")
 CHAR_INDEX_PATH = os.path.join(MODEL_DIR, "char_index.json")
+METRICS_PATH = os.path.join(MODEL_DIR, "training_metrics.json")
 
 # Valid characters in domain names (excluding protocol and sub-paths)
 VALID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789-."
 
 # --- SYNTHETIC DATA GENERATION ---
-# This simulates a high-quality DGA and benign dataset for demonstration and training.
+# Kept for unit tests of tokenizer shapes. The training entrypoint does not
+# call this; it loads data/benign_domains.txt and data/malicious_domains.txt.
 def generate_synthetic_data(num_samples=5000):
     """
     Generates a synthetic balanced dataset of benign and DGA domain names.
@@ -108,21 +121,15 @@ def create_vocab():
 
 def tokenize_and_pad(domains, char_index):
     """Converts a list of domain strings to padded index sequences."""
-    tokenized_domains = []
-    for domain in domains:
+    tokenized = np.zeros((len(domains), MAX_LEN), dtype=np.int32)
+    for row, domain in enumerate(domains):
         domain = domain.lower().strip()
-        # Convert chars to indices; default to 0 for unknown chars
-        tokens = [char_index.get(char, 0) for char in domain]
-        
-        # Enforce static length (MAX_LEN) using post-padding or truncation
-        if len(tokens) < MAX_LEN:
-            tokens = tokens + [0] * (MAX_LEN - len(tokens))
-        else:
-            tokens = tokens[:MAX_LEN]
-            
-        tokenized_domains.append(tokens)
-        
-    return np.array(tokenized_domains)
+        # Convert chars to indices; default to 0 for unknown chars.
+        # Sequences longer than MAX_LEN are truncated.
+        limit = min(len(domain), MAX_LEN)
+        for col in range(limit):
+            tokenized[row, col] = char_index.get(domain[col], 0)
+    return tokenized
 
 # --- MODEL ARCHITECTURE ---
 def build_lstm_model(vocab_size):
@@ -132,7 +139,7 @@ def build_lstm_model(vocab_size):
         tf.keras.layers.Input(shape=(MAX_LEN,)),
         
         # Embedding Layer: Maps tokens to a 32-dimensional dense space
-        tf.keras.layers.Embedding(input_dim=vocab_size + 1, output_dim=32, input_length=MAX_LEN),
+        tf.keras.layers.Embedding(input_dim=vocab_size + 1, output_dim=32),
         
         # 1D Convolutional Layer: Extracts local character clusters and n-gram structures
         tf.keras.layers.Conv1D(filters=64, kernel_size=3, padding='same', activation='relu'),
@@ -161,6 +168,10 @@ def build_lstm_model(vocab_size):
 
 # --- MAIN EXECUTION ---
 def main():
+    random.seed(42)
+    np.random.seed(42)
+    tf.random.set_seed(42)
+
     print("[*] Setting up directories...")
     os.makedirs(MODEL_DIR, exist_ok=True)
     
@@ -170,16 +181,23 @@ def main():
         json.dump(char_index, f, indent=4)
     print(f"[+] Saved token vocabulary to {CHAR_INDEX_PATH}")
 
-    print("[*] Synthesizing dataset for training...")
-    domains, labels = generate_synthetic_data(num_samples=8000)
-    print(f"[+] Synthesized {len(domains)} records (50% Benign, 50% DGA)")
+    print("[*] Loading downloaded domain lists...")
+    try:
+        domains, labels = load_labeled_domains(DATA_DIR)
+    except FileNotFoundError as exc:
+        raise SystemExit(str(exc)) from exc
+    y = np.array(labels)
+    n_benign = int(np.sum(y == 0))
+    n_malicious = int(np.sum(y == 1))
+    print(f"[+] Loaded {len(domains)} domains ({n_benign} benign, {n_malicious} malicious)")
 
     print("[*] Preprocessing and padding data...")
     X = tokenize_and_pad(domains, char_index)
-    y = np.array(labels)
 
-    # Train / Test Split (80% Train, 20% Test)
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    # Train / Test Split (80% Train, 20% Test), stratified so the test set stays balanced
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42, stratify=y
+    )
     print(f"[+] Train set shape: {X_train.shape}, Test set shape: {X_test.shape}")
 
     print("[*] Initializing Bidirectional LSTM Neural Network...")
@@ -198,22 +216,75 @@ def main():
     )
 
     print("[*] Evaluating trained model on unseen test dataset...")
-    loss, accuracy, precision, recall = model.evaluate(X_test, y_test, verbose=0)
+    loss, keras_accuracy, keras_precision, keras_recall = model.evaluate(X_test, y_test, verbose=0)
+
+    # Positive class is malicious (label 1).
+    y_pred_prob = model.predict(X_test, verbose=0).flatten()
+    y_pred = (y_pred_prob >= 0.5).astype(int)
+    accuracy = accuracy_score(y_test, y_pred)
+    precision = precision_score(y_test, y_pred, pos_label=1, zero_division=0)
+    recall = recall_score(y_test, y_pred, pos_label=1, zero_division=0)
+    f1 = f1_score(y_test, y_pred, pos_label=1, zero_division=0)
+    roc_auc = roc_auc_score(y_test, y_pred_prob)
+
     print(f"\n[+] Test Results:")
     print(f"    Loss:      {loss:.4f}")
     print(f"    Accuracy:  {accuracy:.4f}")
-    print(f"    Precision: {precision:.4f}")
-    print(f"    Recall:    {recall:.4f}")
+    print(f"    Precision: {precision:.4f} (malicious)")
+    print(f"    Recall:    {recall:.4f} (malicious)")
+    print(f"    F1:        {f1:.4f} (malicious)")
+    print(f"    ROC-AUC:   {roc_auc:.4f}")
 
-    # Advanced Metrics
-    y_pred_prob = model.predict(X_test, verbose=0).flatten()
-    y_pred = (y_pred_prob >= 0.5).astype(int)
-    
     print("\n[+] Classification Report:")
     print(classification_report(y_test, y_pred, target_names=["Benign", "DGA"]))
-    
-    roc_auc = roc_auc_score(y_test, y_pred_prob)
     print(f"[+] ROC-AUC Score: {roc_auc:.4f}\n")
+
+    metrics = {
+        "accuracy": round(float(accuracy), 6),
+        "precision_malicious": round(float(precision), 6),
+        "recall_malicious": round(float(recall), 6),
+        "f1_malicious": round(float(f1), 6),
+        "roc_auc": round(float(roc_auc), 6),
+        "loss": round(float(loss), 6),
+        "keras_evaluate": {
+            "accuracy": round(float(keras_accuracy), 6),
+            "precision": round(float(keras_precision), 6),
+            "recall": round(float(keras_recall), 6),
+        },
+        "dataset": {
+            "total": int(len(y)),
+            "benign": n_benign,
+            "malicious": n_malicious,
+            "train": int(len(y_train)),
+            "test": int(len(y_test)),
+            "test_benign": int(np.sum(y_test == 0)),
+            "test_malicious": int(np.sum(y_test == 1)),
+        },
+        "threshold": 0.5,
+        "epochs": 5,
+        "batch_size": 64,
+    }
+    # The live agent blocks at 0.85, which trades recall for precision.
+    agent_pred = (y_pred_prob >= 0.85).astype(int)
+    metrics["agent_threshold"] = {
+        "threshold": 0.85,
+        "accuracy": round(float(accuracy_score(y_test, agent_pred)), 6),
+        "precision_malicious": round(float(precision_score(y_test, agent_pred, pos_label=1, zero_division=0)), 6),
+        "recall_malicious": round(float(recall_score(y_test, agent_pred, pos_label=1, zero_division=0)), 6),
+        "f1_malicious": round(float(f1_score(y_test, agent_pred, pos_label=1, zero_division=0)), 6),
+    }
+    agent = metrics["agent_threshold"]
+    print(
+        f"[+] Agent threshold {agent['threshold']:.2f}: "
+        f"accuracy {agent['accuracy']:.4f}, "
+        f"precision {agent['precision_malicious']:.4f}, "
+        f"recall {agent['recall_malicious']:.4f}, "
+        f"F1 {agent['f1_malicious']:.4f}"
+    )
+    with open(METRICS_PATH, "w", encoding="utf-8") as handle:
+        json.dump(metrics, handle, indent=2)
+        handle.write("\n")
+    print(f"[+] Saved metrics to {METRICS_PATH}")
 
     print(f"[*] Saving model to {MODEL_PATH}...")
     model.save(MODEL_PATH)

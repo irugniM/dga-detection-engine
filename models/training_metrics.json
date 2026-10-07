@@ -1,0 +1,32 @@
+{
+  "accuracy": 0.90296,
+  "precision_malicious": 0.858212,
+  "recall_malicious": 0.96542,
+  "f1_malicious": 0.908665,
+  "roc_auc": 0.960793,
+  "loss": 0.223674,
+  "keras_evaluate": {
+    "accuracy": 0.90296,
+    "precision": 0.858212,
+    "recall": 0.96542
+  },
+  "dataset": {
+    "total": 1995358,
+    "benign": 997679,
+    "malicious": 997679,
+    "train": 1596286,
+    "test": 399072,
+    "test_benign": 199536,
+    "test_malicious": 199536
+  },
+  "threshold": 0.5,
+  "epochs": 5,
+  "batch_size": 64,
+  "agent_threshold": {
+    "threshold": 0.85,
+    "accuracy": 0.769939,
+    "precision_malicious": 0.955925,
+    "recall_malicious": 0.565973,
+    "f1_malicious": 0.710991
+  }
+}
